@@ -1,0 +1,80 @@
+rm(list=ls())
+######
+.libPaths()
+setwd('/score_adata/')
+getwd()
+options(scipen=1000000)
+#######
+library('BiocManager')
+########
+library(limma)
+library(dplyr)
+library(ggplot2)
+############
+#read_adata#
+############
+ecm_score<-read.table('ecm_genes_01_human.txt',sep='\t',header=TRUE)
+head(ecm_score)
+summary(ecm_score)
+reads_single_phase<-as.matrix(read.csv('mtx_adata.csv',
+                                       header=T,row.names=1))
+dim(reads_single_phase)
+coldata<-read.csv('meta_adata.csv',
+                  header=T,row.names=1)
+all(rownames(coldata)%in%colnames(reads_single_phase))
+reads_single_phase<-reads_single_phase[,rownames(coldata)]
+all(rownames(coldata)==colnames(reads_single_phase))
+################
+#core_matrisome#
+################
+core_matrisome=ecm_score$Gene_Symbol[which(ecm_score$Division%in%c(
+  'Core matrisome'))]
+core_matrisome_single_phase=as.matrix(reads_single_phase[rownames(
+  reads_single_phase)%in%(core_matrisome),])
+core_matrisome_combined_mtx=rbind(core_matrisome_single_phase,
+                                  average=apply(
+                                    core_matrisome_single_phase,2,mean))
+core_matrisome_cor_mtx=cor(t(core_matrisome_combined_mtx))
+core_matrisome_cor_vector=core_matrisome_cor_mtx[,
+                                                 dim(
+                                                   core_matrisome_cor_mtx)[1]]
+core_matrisome_single_phase_restricted=core_matrisome_single_phase[
+  rownames(core_matrisome_single_phase)%in%names(
+    core_matrisome_cor_vector[core_matrisome_cor_vector>=0.1]),]
+ecm_01_core_matrisome_score=apply(
+  core_matrisome_single_phase_restricted,2,mean)
+##########
+#collagen#
+##########
+collagen=ecm_score$Gene_Symbol[which(ecm_score$Category%in%c(
+  'Collagens'))]
+collagen_single_phase=as.matrix(reads_single_phase[rownames(
+  reads_single_phase)%in%(collagen),])
+collagen_combined_mtx=rbind(collagen_single_phase,
+                            average=apply(
+                              collagen_single_phase,2,mean))
+collagen_cor_mtx=cor(t(collagen_combined_mtx))
+collagen_cor_vector=collagen_cor_mtx[,
+                                     dim(
+                                       collagen_cor_mtx)[1]]
+collagen_single_phase_restricted=collagen_single_phase[
+  rownames(collagen_single_phase)%in%names(
+    collagen_cor_vector[collagen_cor_vector>=0.1]),]
+ecm_02_collagen_score=apply(
+  collagen_single_phase_restricted,2,mean)
+
+core_matrisome_mtx=cbind(ecm_01_core_matrisome_score,
+                         ecm_02_collagen_score,coldata)
+head(core_matrisome_mtx)
+write.csv(core_matrisome_mtx,'score_adata.csv')
+##################
+#plot_score_adata#
+##################
+ecoscore_fig<-
+  ggplot(score_adata,aes(x=celltype,
+                           y=log2(ecm_01_core_matrisome_score)))+
+  theme_classic() +
+  geom_violin(aes(fill = celltype),scale='width') +
+  geom_boxplot(position = 'dodge',width=.1)
+print(ecoscore_fig)
+ggsave(ecoscore_fig, file='score_adata.pdf',width=6,height=4)
